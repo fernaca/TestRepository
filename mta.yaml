@@ -1,28 +1,93 @@
----
 _schema-version: 3.3.0
 ID: RAG
+description: A simple CAP project.
 version: 1.0.0
-description: "A simple CAP project."
+modules:
+- name: RAG-srv
+  type: nodejs
+  path: gen/srv
+  requires:
+  - name: RAG-db
+  provides:
+  - name: srv-api
+    properties:
+      srv-url: ${default-url}
+  parameters:
+    buildpack: nodejs_buildpack
+    readiness-health-check-http-endpoint: /health
+    readiness-health-check-type: http
+  build-parameters:
+    builder: npm
+- name: RAG-db-deployer
+  type: hdb
+  path: gen/db
+  requires:
+  - name: RAG-db
+  parameters:
+    buildpack: nodejs_buildpack
+- name: RAG-destination-content
+  type: com.sap.application.content
+  requires:
+  - name: RAG-destination-service
+    parameters:
+      content-target: true
+  - name: RAG_html_repo_host
+    parameters:
+      service-key:
+        name: RAG_html_repo_host-key
+  - name: uaa_RAG
+    parameters:
+      service-key:
+        name: uaa_RAG-key
+  parameters:
+    content:
+      instance:
+        destinations:
+        - Name: tinyRouter_RAG_html_repo_host
+          ServiceInstanceName: RAG-html5-app-host-service
+          ServiceKeyName: RAG_html_repo_host-key
+          sap.cloud.service: tinyRouter
+        - Authentication: OAuth2UserTokenExchange
+          Name: tinyRouter_uaa_RAG
+          ServiceInstanceName: RAG-xsuaa-service
+          ServiceKeyName: uaa_RAG-key
+          sap.cloud.service: tinyRouter
+        existing_destinations_policy: ignore
+  build-parameters:
+    no-source: true
+resources:
+- name: RAG-db
+  type: com.sap.xs.hdi-container
+  parameters:
+    service: hana
+    service-plan: hdi-shared
+- name: RAG-destination-service
+  type: org.cloudfoundry.managed-service
+  parameters:
+    config:
+      HTML5Runtime_enabled: true
+      version: 1.0.0
+    service: destination
+    service-name: RAG-destination-service
+    service-plan: lite
+- name: RAG_html_repo_host
+  type: org.cloudfoundry.managed-service
+  parameters:
+    service: html5-apps-repo
+    service-name: RAG-html5-app-host-service
+    service-plan: app-host
+- name: uaa_RAG
+  type: org.cloudfoundry.managed-service
+  parameters:
+    path: ./xs-security.json
+    service: xsuaa
+    service-name: RAG-xsuaa-service
+    service-plan: application
 parameters:
   enable-parallel-deployments: true
 build-parameters:
   before-all:
-    - builder: custom
-      commands:
-        - npm ci
-        - npx cds build --production
-modules:
-  - name: RAG-srv
-    type: nodejs
-    path: gen/srv
-    parameters:
-      buildpack: nodejs_buildpack
-      readiness-health-check-type: http
-      readiness-health-check-http-endpoint: /health
-    build-parameters:
-      builder: npm
-    provides:
-      - name: srv-api # required by consumers of CAP services (e.g. approuter)
-        properties:
-          srv-url: ${default-url}
-    requires: []
+  - builder: custom
+    commands:
+    - npm ci
+    - npx cds build --production
